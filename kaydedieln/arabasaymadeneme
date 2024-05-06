@@ -1,0 +1,123 @@
+import cv2
+import numpy as np
+from ultralytics import YOLO
+import supervision as sv
+
+# IP kamera URL'si (RTSP)
+camera_url = "rtsp://admin:azdcctv2015**@10.1.11.134/profile1/media.smp"
+
+class Zone:
+    def __init__(self, polygon, frame_resolution_wh):
+        self.polygon = polygon.astype(int)  # Koordinatları tam sayıya dönüştür
+        self.frame_resolution_wh = frame_resolution_wh
+        self.current_count = 0
+
+    def trigger(self, detections):
+        for detection in detections:
+            # Detections üzerinde gerekli işlemleri yapın
+            # Örneğin, araç veya insan algılandığında current_count'i artırabilirsiniz.
+            self.current_count += 0
+
+class PolygonZoneAnnotator:
+    def __init__(self, zone, color, thickness, text_thickness, text_scale):
+        self.zone = zone
+        self.color = color
+        self.thickness = thickness
+        self.text_thickness = text_thickness
+        self.text_scale = text_scale
+
+    def annotate(self, scene):
+        # Zone'un içindeki polygonu çiz
+        # cv2.polylines(scene, [self.zone.polygon], isClosed=True, color=(255, 0, 0), thickness=self.thickness)
+
+        # Zone'un içindeki alanı doldur
+        # cv2.fillPoly(scene, [self.zone.polygon], (255, 0, 0))
+
+        # Zone'un içindeki metni ekle
+        # text = f"Count: {self.zone.current_count}"
+        # cv2.putText(scene, text, (self.zone.polygon[0][0], self.zone.polygon[0][1] - 10),
+        #             cv2.FONT_HERSHEY_SIMPLEX, self.text_scale, (255, 0, 0), self.text_thickness)
+
+        return scene
+
+def main():
+    frame_width, frame_height = 1280, 720  # Kamera çözünürlüğü
+
+    model = YOLO("C:/Users/ilknur_ozen/Documents/GitHub/yolov8-live/yolov8l.pt")
+
+    box_annotator = sv.BoxAnnotator(
+        thickness=2,
+        text_thickness=2,
+        text_scale=1
+    )
+
+    zone_polygon = np.array([
+        [0, 0],
+        [0.5, 0],
+        [0.5, 1],
+        [0, 1]
+    ]) * np.array([frame_width, frame_height])
+    
+    zone = Zone(polygon=zone_polygon, frame_resolution_wh=(frame_width, frame_height))
+
+    zone_annotator = PolygonZoneAnnotator(
+        zone=zone, 
+        color=None,
+        thickness=2,
+        text_thickness=4,
+        text_scale=2
+    )
+
+    # RTSP ile görüntü almak için OpenCV kullan
+    
+    cap = cv2.VideoCapture(camera_url)
+
+    # Görüntüyü renkli almak için codec ve FPS ayarları
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+    cap.set(cv2.CAP_PROP_FPS, 30)
+
+    cv2.namedWindow("yolov8", cv2.WINDOW_NORMAL)
+
+    while True:
+        ret, frame = cap.read()
+
+        if not ret:
+            break
+
+        # Görüntüyü BGR'den RGB'ye dönüştür
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+        result = model(frame_rgb, agnostic_nms=True)[0]
+        detections = sv.Detections.from_yolov8(result)
+
+        # Sadece araçları ve insanları seç
+        car_and_person_detections = [
+            detection for detection in detections 
+            if model.model.names[detection[2]] in ['car']
+        ]
+
+        labels = [
+            f"{model.model.names[class_id]} {confidence:0.2f}"
+            for _, confidence, class_id, _
+            in car_and_person_detections
+        ]
+
+        frame = box_annotator.annotate(
+            scene=frame, 
+            detections=car_and_person_detections, 
+            labels=labels
+        )
+
+        zone.trigger(detections=car_and_person_detections)
+        frame = zone_annotator.annotate(scene=frame)      
+
+        cv2.imshow("yolov8", frame)
+
+        if (cv2.waitKey(30) == 27):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()

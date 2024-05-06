@@ -1,3 +1,4 @@
+
 import cv2
 import argparse
 
@@ -30,12 +31,12 @@ def main():
     args = parse_arguments()
     frame_width, frame_height = args.webcam_resolution
 
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
 
-    model = YOLO("yolov8l.pt")
-
+    model = YOLO("best.pt")
+ 
     box_annotator = sv.BoxAnnotator(
         thickness=2,
         text_thickness=2,
@@ -78,4 +79,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main()  
